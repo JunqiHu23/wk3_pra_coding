@@ -10,7 +10,10 @@ output: html_document
 library(sf)
 library(here)
 library(raster)
-
+library(tidyverse)
+library(rmapshaper)
+library(ggplot2)
+library(plotly)
 ```
 
 ```{r}
@@ -89,38 +92,45 @@ pr1
 ```{r}
 plot(pr1)
 ```
-
-
-
+```{r}
 #3.5.3 Data Loading
 library(fs)
-dir_info("wc2.1_5m_tavg/") 
+dir_info("data/wc2.1_5m_tavg/") 
+```
 
+```{r}
 library(tidyverse)
-listfiles <- dir_info("wc2.1_5m_tavg")%>%
+listfiles <- dir_info("data/wc2.1_5m_tavg")%>%
   filter(str_detect(path,".tif"))%>%
   dplyr::select(path)%>%
   pull()
 
 listfiles
+```
 
-
+```{r}
 worldclitemp <-listfiles %>%
   stack()
 #have a look at the raster stack
 worldclitemp
+```
 
-
+```{r}
 # access the january layer
 worldclitemp[[1]]
+```
 
-
+```{r}
 month <- c("Jan","Feb","Mar","Apr","May","Jun",
            "Jul","Aug","Sep","Oct","Nov","Dec")
 names(worldclitemp)<-month
+```
 
+```{r}
 worldclitemp$Jan
+```
 
+```{r}
 
 #3.5.4Raster location
 site <- c("Brisbane", "Melbourne", "Perth", "Sydney", "Broome", "Darwin", "Orange", 
@@ -134,11 +144,27 @@ lat <- c(-27.47, -37.91, -31.95, -33.87, 17.96, -12.46, -33.28, -33.33, -16.92,
 samples <- data.frame(site, lon, lat, row.names="site")
 # Extract the data from the Rasterstack for all points 
 AUcitytemp<- raster::extract(worldclitemp, samples)
+```
 
-Aucitytep2 <-AUcitytemp %>%
+```{r}
+#将城市名称添加到 AUcitytemp 的行中
+Aucitytemp2 <-AUcitytemp %>%
   as_tibble()%>%
   add_column(site = site,.before ="Jan")
+```
 
+# 3.6.1 data preparation 
+```{r}
+Perthtemp <- Aucitytemp2 %>%
+  filter(site=="Perth")
+```
+
+# 3.6.2 hisogram
+```{r}
+hist(as.numeric(Perthtemp))
+```
+
+```{r}
 #define where you want the breaks in the historgram
 userbreak <-c(8,10,12,14,16,18,20,22,24,26)
 hist(as.numeric(Perthtemp),
@@ -147,33 +173,27 @@ hist(as.numeric(Perthtemp),
      main="Histogram of Perth Temperature",
      xlab="Temperature",
      ylab="Frequency")
+```
 
+```{r}
 #check out the histogram information R generated
 histinfo <- Perthtemp%>%
   as.numeric()%>%
   hist(.)
 
 histinfo
+```
+# 3.6.3 Using more data
+```{r}
 
-
-
-#3.6 Part2  descriptive statistics
-#3.6.1 Data preparation
-Perthtemp <- Aucitytep2%>%
-  filter(site=="Perth")
-
-Perthtemp <- Aucitytep2[3,]
-
-#3.6.2 Histogram
-hist(as.numeric(Perthtemp))
-
-
-#3.6.3 Using more data
 plot(CHNoutline$geom)
+```
+
+```{r}
 
 #load the rmapshaper package
-install.packages("rmapshaper")
 library(rmapshaper)
+library(geojsonsf)
 #simplify the shapefile
 #keep specifies the % of points
 #to keep
@@ -182,31 +202,51 @@ CHNoutSIMPLE<-CHNoutline%>%
 
 plot(CHNoutSIMPLE$geom)
 
-
+```
+```{r}
 
 print(CHNoutline)
+```
+
+```{r}
 
 #this works nicely for rasters
 crs(worldclitemp)
+```
 
+```{r}
+# now crop our temp data to the extent
 CHNtemp<-CHNoutline%>%
   crop(worldclitemp,.)
-plot(CHNtemp)
 
+plot(CHNtemp)
+```
+
+```{r}
 #subset using the known location of the raster
 exactCHN <- CHNtemp %>%
   mask(.,CHNoutline,na.rm=TRUE)
+
+plot(exactCHN)
+```
+```{r}
+#subset using the known location of the raster
 hist(exactCHN[[3]],col="red",main="March temperature")
+```
 
+```{r}
+#OR
 #subset with the word Mar
-hist(raster::subset(exactCHN,"Mar"),col="red",main="March temperature")
-
-
+hist(raster::subset(exactCHN, "Mar"), col="red", main ="March temperature")
+```
 #3.6.4 Histogram with ggplot
+```{r}
+
 exactCHNdf <- exactCHN %>%
   as.data.frame()
+```
 
-
+```{r}
 library(ggplot2)
 
 gghist <- ggplot(exactCHNdf,
@@ -223,9 +263,9 @@ gghist +geom_vline(aes(xintercept=mean(Mar,
                    linetype="dashed",
                    size=1)+
   theme(plot.title = element_text(hjust = 0.5))
+```
 
-
-
+```{r}
 squishdata <-exactCHNdf%>%
   pivot_longer(
     col=1:12,
@@ -233,19 +273,26 @@ squishdata <-exactCHNdf%>%
     values_to = "Temp"
   )
 
+squishdata
+```
+
+
+```{r}
 twomonths <- squishdata%>%
   #| = or
   filter(.,Month == "Jan" | Month =="Jun")
+```
 
-meantwomonths <- twomonths%>%
-  group_by(Month)%>%
-  summarise(mean=mean(Temp,na.rm=TRUE))
+```{r}
+meantwomonths <- twomonths %>%
+  group_by(Month) %>%
+  summarise(mean=mean(Temp, na.rm=TRUE))
 
 meantwomonths
+```
 
 
-
-
+```{r}
 ggplot(twomonths, aes(x=Temp, color=Month, fill=Month)) +
   geom_histogram(position="identity", alpha=0.5)+
   geom_vline(data=meantwomonths, 
@@ -258,30 +305,28 @@ ggplot(twomonths, aes(x=Temp, color=Month, fill=Month)) +
        y="Frequency")+
   theme_classic()+
   theme(plot.title = element_text(hjust = 0.5))
-
-#-----------------------------------------------------
-
-
-
+```
+```{r}
 data_complete_cases <- squishdata %>%
   drop_na()%>% 
   mutate(Month = factor(Month, levels = c("Jan","Feb","Mar",
                                           "Apr","May","Jun",
                                           "Jul","Aug","Sep",
                                           "Oct","Nov","Dec")))
+```
 
+```{r}
 # Plot faceted histogram
 ggplot(data_complete_cases, aes(x=Temp, na.rm=TRUE))+
-  geom_histogram(color="red", binwidth = 5)+
-  labs(title="Ggplot2 faceted histogram of china temperatures", 
+  geom_histogram(color="black", binwidth = 5)+
+  labs(title="Ggplot2 faceted histogram of Australian temperatures", 
        x="Temperature",
        y="Frequency")+
   facet_grid(Month ~ .)+
-  theme
+  theme(plot.title = element_text(hjust = 0.5))
+```
 
-
-#-----------------------------------------------
-
+```{r}
 library(plotly)
 # split the data for plotly based on month
 
@@ -309,40 +354,46 @@ ihist<-plot_ly(alpha = 0.6) %>%
   layout(barmode = "overlay", xaxis=x, yaxis=y)
 
 ihist
+```
 
 
-
-
+```{r}
 # mean per month
 meanofall <- squishdata %>%
   group_by(Month) %>%
   summarise(mean = mean(Temp, na.rm=TRUE))
 
-# print the top 1
-head(meanofall, n=1)
+meanofall
+```
 
-
-
-
+```{r}
 # standard deviation per month
 sdofall <- squishdata %>%
   group_by(Month) %>%
   summarize(sd = sd(Temp, na.rm=TRUE))
+
+sdofall
 
 # maximum per month
 maxofall <- squishdata %>%
   group_by(Month) %>%
   summarize(max = max(Temp, na.rm=TRUE))
 
+maxofall
+
 # minimum per month
 minofall <- squishdata %>%
   group_by(Month) %>%
   summarize(min = min(Temp, na.rm=TRUE))
 
+minofall
+
 # Interquartlie range per month
 IQRofall <- squishdata %>%
   group_by(Month) %>%
   summarize(IQR = IQR(Temp, na.rm=TRUE))
+
+IQRofall
 
 # perhaps you want to store multiple outputs in one list..
 lotsofstats <- squishdata %>%
@@ -355,3 +406,10 @@ lotsofstats <- squishdata %>%
 
 meanwholeyear=squishdata %>%
   summarize(meanyear = mean(Temp, na.rm=TRUE))
+
+meanwholeyear
+```
+
+
+
+
